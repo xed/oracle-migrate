@@ -12,13 +12,6 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-//
-//var dialects = map[string]gorp.Dialect{
-//	"sqlite3":  gorp.SqliteDialect{},
-//	"postgres": gorp.PostgresDialect{},
-//	"mysql":    gorp.MySQLDialect{Engine: "InnoDB", Encoding: "UTF8"},
-//}
-
 var ConfigFile string
 var ConfigEnvironment string
 
@@ -28,7 +21,6 @@ func ConfigFlags(f *flag.FlagSet) {
 }
 
 type Environment struct {
-	//Dialect    string `yaml:"dialect"`
 	DataSource string `yaml:"datasource"`
 	Dir        string `yaml:"dir"`
 	TableName  string `yaml:"table"`
@@ -61,10 +53,6 @@ func GetEnvironment() (*Environment, error) {
 		return nil, errors.New("No environment: " + ConfigEnvironment)
 	}
 
-	//if env.Dialect == "" {
-	//	return nil, errors.New("No dialect specified")
-	//}
-
 	if env.DataSource == "" {
 		return nil, errors.New("No data source specified")
 	}
@@ -95,13 +83,6 @@ func GetConnection(env *Environment) (*sql.DB, string, error) {
 		fmt.Println("db is nil")
 		return nil, "", fmt.Errorf("Cannot connect to database: db is nil")
 	}
-
-	//defer func() {
-	//	err = db.Close()
-	//	if err != nil {
-	//		fmt.Println("Close error is not nil:", err)
-	//	}
-	//}()
 
 	return db, "oci8", nil
 }

@@ -1,7 +1,5 @@
 package main
 
-
-
 import (
 	"fmt"
 	"os"
@@ -27,18 +25,6 @@ func realMain() int {
 			"down": func() (cli.Command, error) {
 				return &DownCommand{}, nil
 			},
-			//"redo": func() (cli.Command, error) {
-			//	return &RedoCommand{}, nil
-			//},
-			//"status": func() (cli.Command, error) {
-			//	return &StatusCommand{}, nil
-			//},
-			//"new": func() (cli.Command, error) {
-			//	return &NewCommand{}, nil
-			//},
-			//"skip": func() (cli.Command, error) {
-			//	return &SkipCommand{}, nil
-			//},
 		},
 		HelpFunc: cli.BasicHelpFunc("oracle-migrate"),
 		Version:  "0.0.1",

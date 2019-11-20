@@ -372,52 +372,68 @@ func ExecMax(db *sql.DB, m MigrationSource, dir MigrationDirection, max int) (in
 	fmt.Println("in ExecMax migrations", migrations)
 	// Apply migrations
 	applied := 0
-	for _, migration := range migrations {
-		for _, stmt := range migration.Queries {
-			var query string
-			query = strings.TrimSpace(stmt)
+	//TODO: @xed START transaction
+	tx, err := db.Begin()
+	if err != nil {
+		fmt.Println("Problem with start transaction")
+	}
+	if tx != nil {
+		for _, migration := range migrations {
+			for _, stmt := range migration.Queries {
+				var query string
+				query = strings.TrimSpace(stmt)
 
-			last := query[len(query)-1:]
-			if last == ";" {
-				query = query[:len(query)-1]
+				last := query[len(query)-1:]
+				if last == ";" {
+					query = query[:len(query)-1]
+				}
+
+				fmt.Println("query", query)
+				ctx, cancel := context.WithTimeout(context.Background(), 55*time.Second)
+				_, err = tx.ExecContext(ctx, query)
+				if err != nil {
+					fmt.Println("ExecMax ExecContext error is not nil:", err)
+					tx.Rollback()
+					return applied, newTxError(migration, err)
+				}
+				cancel()
 			}
 
-			fmt.Println("query", query)
-			ctx, cancel := context.WithTimeout(context.Background(), 55*time.Second)
-			_, err = db.ExecContext(ctx, query)
-			cancel()
-			if err != nil {
-				fmt.Println("ExecMax ExecContext error is not nil:", err)
-				return applied, newTxError(migration, err)
+			switch dir {
+			case Up:
+				query := "insert into " + tableName + " ( id, applied_at) values (:1,:2)"
+				ctx, cancel := context.WithTimeout(context.Background(), 55*time.Second)
+				result, err := tx.ExecContext(ctx, query, migration.Id, time.Now())
+				cancel()
+				fmt.Println("in ExecMax time", time.Now())
+				fmt.Println("in ExecMax result ", result, " err", err, " query:", query)
+				if err != nil {
+					log.Println(err.Error())
+					tx.Rollback()
+					return applied, newTxError(migration, err)
+				}
+			case Down:
+				query := "DELETE FROM " + tableName + " WHERE id = " + migration.Id
+				ctx, cancel := context.WithTimeout(context.Background(), 55*time.Second)
+				_, err = tx.ExecContext(ctx, query)
+				cancel()
+				if err != nil {
+					tx.Rollback()
+					fmt.Println("ExecContext error is not nil:", err)
+					return applied, newTxError(migration, err)
+				}
+			default:
+				panic("Not possible")
 			}
-		}
-
-		switch dir {
-		case Up:
-			query := "insert into " + tableName + " ( id, applied_at) values (:1,:2)"
-			ctx, cancel := context.WithTimeout(context.Background(), 55*time.Second)
-			result, err := db.ExecContext(ctx, query, migration.Id, time.Now())
-			cancel()
-			fmt.Println("in ExecMax time", time.Now())
-			fmt.Println("in ExecMax result ", result, " err", err, " query:", query)
-			if err != nil {
-				log.Println(err.Error())
-				return applied, newTxError(migration, err)
-			}
-		case Down:
-			query := "DELETE FROM " + tableName + " WHERE id = " + migration.Id
-			ctx, cancel := context.WithTimeout(context.Background(), 55*time.Second)
-			_, err = db.ExecContext(ctx, query)
-			cancel()
-			if err != nil {
-				fmt.Println("ExecContext error is not nil:", err)
-				return applied, newTxError(migration, err)
-			}
-		default:
-			panic("Not possible")
 		}
 
 		applied++
+
+		err = tx.Commit()
+		if err != nil {
+			fmt.Println("Commit", applied)
+			return applied, nil
+		}
 	}
 	fmt.Println("applied", applied)
 	return applied, nil
@@ -433,10 +449,7 @@ func PlanMigration(db *sql.DB, m MigrationSource, dir MigrationDirection, max in
 	if err != nil {
 		return nil, err
 	}
-	//fmt.Println("FindMigrations", migrations)
-	//for _, migration := range migrations {
-	//	fmt.Println("FindMigrations in for", migration)
-	//}
+
 	migrationRecords, err := getMigrationRecords(db)
 	if err != nil {
 		return nil, err
