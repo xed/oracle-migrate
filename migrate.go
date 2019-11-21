@@ -369,16 +369,17 @@ func ExecMax(db *sql.DB, m MigrationSource, dir MigrationDirection, max int) (in
 	if err != nil {
 		return 0, err
 	}
-	fmt.Println("in ExecMax migrations", migrations)
 	// Apply migrations
 	applied := 0
-	//TODO: @xed START transaction
-	tx, err := db.Begin()
-	if err != nil {
-		fmt.Println("Problem with start transaction")
-	}
-	if tx != nil {
-		for _, migration := range migrations {
+
+	for _, migration := range migrations {
+
+		//TODO: @xed START transaction
+		tx, err := db.Begin()
+		if err != nil {
+			fmt.Println("Problem with start transaction")
+		}
+		if tx != nil {
 			for _, stmt := range migration.Queries {
 				var query string
 				query = strings.TrimSpace(stmt)
@@ -393,7 +394,10 @@ func ExecMax(db *sql.DB, m MigrationSource, dir MigrationDirection, max int) (in
 				_, err = tx.ExecContext(ctx, query)
 				if err != nil {
 					fmt.Println("ExecMax ExecContext error is not nil:", err)
-					tx.Rollback()
+					err := tx.Rollback()
+					if err != nil {
+						fmt.Println("ffffffff")
+					}
 					return applied, newTxError(migration, err)
 				}
 				cancel()
@@ -409,32 +413,44 @@ func ExecMax(db *sql.DB, m MigrationSource, dir MigrationDirection, max int) (in
 				fmt.Println("in ExecMax result ", result, " err", err, " query:", query)
 				if err != nil {
 					log.Println(err.Error())
-					tx.Rollback()
+					err := tx.Rollback()
+					if err != nil {
+						fmt.Println("ffffffff")
+					}
 					return applied, newTxError(migration, err)
 				}
 			case Down:
-				query := "DELETE FROM " + tableName + " WHERE id = " + migration.Id
+				query := "DELETE FROM " + tableName + " WHERE id = :1"
+				fmt.Println("query down", query)
 				ctx, cancel := context.WithTimeout(context.Background(), 55*time.Second)
-				_, err = tx.ExecContext(ctx, query)
+				_, err = tx.ExecContext(ctx, query, migration.Id)
 				cancel()
 				if err != nil {
-					tx.Rollback()
+					err := tx.Rollback()
+					if err != nil {
+						fmt.Println("ffffffff")
+					}
 					fmt.Println("ExecContext error is not nil:", err)
 					return applied, newTxError(migration, err)
 				}
 			default:
+				err := tx.Rollback()
+				if err != nil {
+					fmt.Println("ffffffff")
+				}
 				panic("Not possible")
+			}
+			err = tx.Commit()
+			if err != nil {
+				fmt.Println("Commit doesnt work", applied)
+				return applied, nil
 			}
 		}
 
-		applied++
-
-		err = tx.Commit()
-		if err != nil {
-			fmt.Println("Commit", applied)
-			return applied, nil
-		}
 	}
+
+	applied++
+
 	fmt.Println("applied", applied)
 	return applied, nil
 }
@@ -454,7 +470,6 @@ func PlanMigration(db *sql.DB, m MigrationSource, dir MigrationDirection, max in
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println("PlanMigration getMigrationRecords", migrationRecords)
 	// Sort migrations that have been run by Id.
 	var existingMigrations []*Migration
 	for _, migrationRecord := range migrationRecords {
@@ -464,7 +479,6 @@ func PlanMigration(db *sql.DB, m MigrationSource, dir MigrationDirection, max in
 		})
 	}
 	sort.Sort(byId(existingMigrations))
-	fmt.Println("PlanMigration existingMigrations", existingMigrations)
 	// Make sure all migrations in the database are among the found migrations which
 	// are to be applied.
 	migrationsSearch := make(map[string]struct{})
